@@ -51,27 +51,6 @@ def _get_kms_key_id(self, queue_url):
   return self.kms_key_ids.get(queue_url, None)
 
 
-def _store_in_s3_encrypted(self, queue_url, message_attributes, message_body):
-  encoded_body = message_body.encode()
-  if self.large_payload_support and (self.always_through_s3 or self._is_large_message(message_attributes, encoded_body)):
-    message_attributes[RESERVED_ATTRIBUTE_NAME] = {}
-    message_attributes[RESERVED_ATTRIBUTE_NAME]['DataType'] = 'Number'
-    message_attributes[RESERVED_ATTRIBUTE_NAME]['StringValue'] = str(len(encoded_body))
-    s3_key = str(uuid4())
-    put_args = {
-      'ACL': 'private',
-      'Body': encoded_body,
-      'ContentLength': len(encoded_body)
-    }
-    kms_key_id = self.get_kms_key_id(queue_url) or self.default_kms_key_id
-    if kms_key_id:
-        put_args['ServerSideEncryption'] = 'aws:kms'
-        put_args['SSEKMSKeyId'] = kms_key_id
-    self.s3.Object(self.large_payload_support, s3_key).put(**put_args)
-    message_body = jsondumps({MESSAGE_POINTER_CLASS: {'s3BucketName': self.large_payload_support, 's3Key': s3_key}}, separators=(',', ':'))
-  return message_attributes, message_body
-
-
 def _add_custom_attributes(class_attributes):
   class_attributes['default_kms_key_id'] = property(
     _get_default_kms_key_id, 
@@ -96,6 +75,17 @@ def _add_queue_resource_custom_attributes(class_attributes, **kwargs):
   _add_custom_attributes(class_attributes)  
 
 
+def _create_s3_put_object_params_decorater(func):
+  def create_put_object_params(*args, **kwargs):
+    put_object_params = func(*args, **kwargs)
+    kms_key_id = args[0].get_kms_key_id(args[2]) or args[0].default_kms_key_id
+    if kms_key_id:
+        put_object_params['ServerSideEncryption'] = 'aws:kms'
+        put_object_params['SSEKMSKeyId'] = kms_key_id
+    return put_object_params
+  return create_put_object_params
+
+
 class SQSEncryptedExtendedClientSession(SQSExtendedClientSession):
 
 
@@ -112,3 +102,5 @@ class SQSEncryptedExtendedClientSession(SQSExtendedClientSession):
     )
     self.events.register('creating-client-class.sqs', _add_client_custom_attributes)
     self.events.register('creating-resource-class.sqs.Queue', _add_queue_resource_custom_attributes)
+    self.register_client_decorator('sqs', '_create_s3_put_object_params', _create_s3_put_object_params_decorater)
+    self.register_resource_decorator('sqs', 'Queue', '_create_s3_put_object_params', _create_s3_put_object_params_decorater)

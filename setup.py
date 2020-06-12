@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='sqs-encrypted-extended-client',
-    version='0.0.1',
+    version='0.0.2',
     description='Allows for per-queue KMS encryption of large messages in S3',
     author='Joseph Wortmann',
     author_email='jwortmann@quinovas.com',

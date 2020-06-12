@@ -1,9 +1,7 @@
 import boto3
 import sqs_extended_client
+from .session import SQSEncryptedExtendedClientSession
 
-from .session import SQSEncryptedExtendedClientSession, _store_in_s3_encrypted
-
-sqs_extended_client.session._store_in_s3 = _store_in_s3_encrypted
 
 # Monkey patch to use our Session object instead of boto3's
 boto3.session.Session = SQSEncryptedExtendedClientSession
